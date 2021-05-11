@@ -104,21 +104,30 @@ router.post("/", async (req, res, next) =>{
 
 // If invoice cannot be found, returns a 404.
 
-// Needs to be passed in a JSON body of {amt}
+// Needs to be passed in a JSON body of {amt, paid}
 
+// If paying unpaid invoice: sets paid_date to today
+// If un-paying: sets paid_date to null
+// Else: keep current paid_date
 // Returns: {invoice: {id, comp_code, amt, paid, add_date, paid_date}}
-router.post("/:id", async (req, res, next) =>{
+router.put("/:id", async (req, res, next) =>{
     try{
 
         const id = req.params.id
-        const {  amt } = req.body
+        const {  amt, paid } = req.body
+
+        const d = new Date
+
+        const paid_date = paid ? 
+            `${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}` 
+            : null
 
         let invoice = await db.query(
             `update invoices 
-            set amt = $2
+            set amt = $2, paid = $3, paid_date = $4
             where id = $1
             returning id, comp_code, amt, paid, add_date, paid_date`,
-            [id, amt]
+            [id, amt, paid, paid_date]
         )
 
         if( !invoice.rows[0] ){

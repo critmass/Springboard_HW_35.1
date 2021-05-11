@@ -1,6 +1,7 @@
-const express = require("express");
+const express = require("express")
 const ExpressError = require("../expressError")
-const db = require("../db");
+const db = require("../db")
+const slugify = require("slugify")
 
 
 let router = new express.Router();
@@ -21,8 +22,10 @@ router.get("/", async (req, res, next) =>{
 
 
 // GET /companies/[code]
+// when viewing details for a company, 
+// you can see the names of the industries for that company
 // Return obj of company: 
-// {company: {code, name, description, invoices: [id, ...]}}
+// {company: {code, name, description, invoices: [id, ...], industries:[industry, ...]}}
 
 // If the company given cannot be found, this should return a 
 // 404 status response.
@@ -31,7 +34,7 @@ router.get("/:code", async (req, res, next) =>{
     try{
 
         const companyCode = req.params.code
-        console.log(companyCode)
+
         let company_data = await db.query(
             `select code, name, description 
             from companies 
@@ -44,11 +47,19 @@ router.get("/:code", async (req, res, next) =>{
                 from invoices
                 where comp_code = $1`, [companyCode]
             )
+            let industries = await db.query(
+                `select industry
+                from industries ind
+                inner join company_industry ci
+                on ind.code = ci.ind_code
+                where ci.comp_code = $1`, [companyCode]
+            )
             let company = {
                 code:company_data.rows[0].code,
                 name:company_data.rows[0].name,
                 description:company_data.rows[0].description,
-                invoices:invoices.rows.map( invoice => invoice["id"])
+                invoices:invoices.rows.map( invoice => invoice["id"]),
+                industries:industries.rows.map( industry => industry["industry"])
             }
             return res.json( {company} )
         }
@@ -73,7 +84,14 @@ router.get("/:code", async (req, res, next) =>{
 router.post("/", async (req, res, next) =>{
     try{
         
-        const { code, name, description } = req.body
+        let { code, name, description } = req.body
+
+        code = code ? code:slugify( name, {
+            replacement:'',
+            strict:true,
+            locale:'en',
+            lower:true
+        })
 
         const company = await db.query(
             `insert into companies (code, name, description)
@@ -137,7 +155,8 @@ router.delete("/:code", async (req, res, next) =>{
         )
     
         if( !confirmation.rowCount ){
-            throw new ExpressError(`code: ${ companyCode } not found`, 404)
+            throw new ExpressError(
+                `code: ${ companyCode } not found`, 404)
         }
 
         return res.json( {status:"deleted"} )
